@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkillGap AI – Next-Gen Resume Intelligence</title>
+  <meta name="description" content="AI-powered resume skill gap analyzer. Upload your PDF resume and instantly discover your role match, detected skills, and gaps to close." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* ===================== RESET & TOKENS ===================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep:   #050c17;
+      --bg-mid:    #091322;
+      --bg-card:   rgba(10, 25, 47, 0.72);
+      --border:    rgba(0, 210, 180, 0.18);
+      --teal:      #00d4aa;
+      --teal-dim:  #00b894;
+      --cyan:      #38bdf8;
+      --red:       #f87171;
+      --text-main: #e2e8f0;
+      --text-muted:#7fa0bb;
+      --radius:    14px;
+      --glow:      0 0 28px rgba(0, 212, 170, 0.22);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-main);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ===================== ANIMATED BG ===================== */
+    .bg-canvas {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 55% at 8% 12%,  rgba(0,100,80,0.28) 0%, transparent 65%),
+        radial-gradient(ellipse 55% 50% at 92% 85%, rgba(0,80,160,0.20) 0%, transparent 65%),
+        linear-gradient(160deg, #050c17 0%, #091322 100%);
+    }
+
+    /* floating orbs */
+    .orb {
+      position: fixed; border-radius: 50%; filter: blur(90px); pointer-events: none;
+      animation: drift 14s ease-in-out infinite alternate;
+    }
+    .orb-1 { width: 420px; height: 420px; background: rgba(0,212,170,0.09); top: -80px; left: -80px; animation-delay: 0s; }
+    .orb-2 { width: 360px; height: 360px; background: rgba(56,189,248,0.07); bottom: -60px; right: -60px; animation-delay: -7s; }
+
+    @keyframes drift {
+      from { transform: translate(0,0) scale(1); }
+      to   { transform: translate(40px, 30px) scale(1.07); }
+    }
+
+    /* ===================== LAYOUT ===================== */
+    .page { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 48px 20px 80px; }
+
+    /* ===================== HEADER ===================== */
+    header { text-align: center; margin-bottom: 44px; }
+
+    .logo {
+      display: inline-flex; align-items: center; gap: 12px;
+      font-size: 2.4rem; font-weight: 800; letter-spacing: -0.5px;
+      color: #fff;
+    }
+    .logo-icon {
+      width: 46px; height: 46px; border-radius: 12px;
+      background: linear-gradient(135deg, #00d4aa22, #38bdf822);
+      border: 1.5px solid var(--teal);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+    }
+    .logo span { color: var(--teal); }
+
+    .tagline {
+      margin-top: 8px; font-size: 0.95rem; color: var(--text-muted);
+      font-weight: 400; letter-spacing: 0.5px;
+    }
+
+    /* ===================== UPLOAD BOX ===================== */
+    .upload-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      display: flex; align-items: center; gap: 14px;
+      backdrop-filter: blur(18px);
+      transition: border-color .3s, box-shadow .3s;
+      margin-bottom: 6px;
+      cursor: pointer;
+    }
+    .upload-card:hover { border-color: var(--teal); box-shadow: var(--glow); }
+    .upload-card.drag-over { border-color: var(--teal); box-shadow: var(--glow); background: rgba(0,212,170,0.07); }
+
+    .upload-icon {
+      color: var(--teal); font-size: 1.3rem; flex-shrink: 0;
+    }
+
+    #fileName {
+      flex: 1; font-size: 0.92rem; color: var(--text-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #fileName.has-file { color: var(--text-main); }
+
+    #fileInputHidden { display: none; }
+
+    .btn-analyze {
+      padding: 10px 26px;
+      background: linear-gradient(90deg, var(--teal), #38bdf8);
+      border: none; color: #050c17; font-weight: 700;
+      font-size: 0.9rem; border-radius: 9px; cursor: pointer;
+      display: flex; align-items: center; gap: 8px;
+      white-space: nowrap; flex-shrink: 0;
+      transition: opacity .2s, transform .15s;
+    }
+    .btn-analyze:hover { opacity: .88; transform: translateY(-1px); }
+    .btn-analyze:active { transform: translateY(0); }
+    .btn-analyze:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .upload-hint {
+      text-align: center; font-size: 0.78rem; color: var(--text-muted);
+      margin-bottom: 28px;
+    }
+
+    /* ===================== SPINNER ===================== */
+    .spinner-wrap { display: none; text-align: center; padding: 40px 0; }
+    .spinner {
+      width: 44px; height: 44px; border: 3px solid rgba(0,212,170,0.18);
+      border-top-color: var(--teal); border-radius: 50%;
+      animation: spin .8s linear infinite; margin: 0 auto 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-wrap p { color: var(--text-muted); font-size: .9rem; }
+
+    /* ===================== RESULT BANNER ===================== */
+    #result { display: none; }
+
+    .banner {
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+      margin-bottom: 24px;
+      border: 1.5px solid;
+      backdrop-filter: blur(18px);
+      animation: fadeUp .4s ease;
+    }
+    .banner.good {
+      background: rgba(0, 212, 170, 0.08);
+      border-color: var(--teal);
+      box-shadow: var(--glow);
+    }
+    .banner.warn {
+      background: rgba(248,163,113,0.08);
+      border-color: #f8a450;
+      box-shadow: 0 0 28px rgba(248,163,113,0.18);
+    }
+    .banner.bad {
+      background: rgba(248,113,113,0.08);
+      border-color: var(--red);
+      box-shadow: 0 0 28px rgba(248,113,113,0.18);
+    }
+
+    .banner-left { display: flex; align-items: center; gap: 16px; }
+    .banner-icon { font-size: 2.4rem; }
+    .banner-label {
+      font-size: 1.55rem; font-weight: 800; letter-spacing: 1px;
+    }
+    .banner.good  .banner-label { color: var(--teal); }
+    .banner.warn  .banner-label { color: #f8a450; }
+    .banner.bad   .banner-label { color: var(--red); }
+    .banner-sub { font-size: .88rem; color: var(--text-muted); margin-top: 3px; }
+
+    .banner-right { text-align: right; }
+    .confidence-label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+    .confidence-value { font-size: 2.2rem; font-weight: 800; color: #fff; }
+
+    /* ===================== GRID ===================== */
+    .grid-3 {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 18px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 700px) { .grid-3 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 20px;
+      backdrop-filter: blur(18px);
+      animation: fadeUp .5s ease;
+    }
+    .card-title {
+      font-size: .82rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--teal);
+      display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+    }
+    .card-title svg { flex-shrink: 0; }
+
+    /* ===================== ROLE PROFILE CARD ===================== */
+    .role-value { font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 10px; }
+    .progress-label { font-size: .77rem; color: var(--text-muted); margin-bottom: 5px; display: flex; justify-content: space-between; }
+    .progress-track { height: 7px; background: #0d1f35; border-radius: 99px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--teal), #38bdf8); transition: width 1s ease; }
+    .progress-fill.warn  { background: linear-gradient(90deg, #f8a450, #fbbf24); }
+    .progress-fill.bad   { background: linear-gradient(90deg, var(--red), #f97316); }
+
+    /* ===================== RADAR CARD ===================== */
+    .radar-wrap { position: relative; width: 100%; max-height: 200px; display: flex; align-items: center; justify-content: center; }
+
+    /* ===================== LEXICAL/TAGS CARD ===================== */
+    .tag-cloud { display: flex; flex-wrap: wrap; gap: 7px; }
+    .tag {
+      padding: 4px 10px; border-radius: 6px; font-size: .75rem; font-weight: 500;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .tag.detected { background: rgba(0,212,170,0.15); color: var(--teal); border: 1px solid rgba(0,212,170,0.25); }
+    .tag.missing  { background: rgba(248,113,113,0.12); color: var(--red);  border: 1px solid rgba(248,113,113,0.22); }
+
+    /* ===================== ADVANCED ACCORDION ===================== */
+    .accordion {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(18px);
+      animation: fadeUp .6s ease;
+      margin-top: 0;
+    }
+    .accordion-header {
+      padding: 18px 24px; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+      user-select: none;
+    }
+    .accordion-header span { font-size: .92rem; font-weight: 600; color: var(--text-main); display: flex; align-items: center; gap: 10px; }
+    .accordion-header span svg { color: var(--teal); }
+    .chevron { transition: transform .3s; color: var(--text-muted); }
+    .chevron.open { transform: rotate(180deg); }
+
+    .accordion-body {
+      max-height: 0; overflow: hidden;
+      transition: max-height .4s cubic-bezier(.4,0,.2,1), padding .3s;
+      padding: 0 24px;
+    }
+    .accordion-body.open { max-height: 600px; padding: 0 24px 24px; }
+
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 560px) { .detail-grid { grid-template-columns: 1fr; } }
+
+    .detail-item { border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 10px; }
+    .detail-label { font-size: .72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .7px; margin-bottom: 3px; }
+    .detail-value { font-size: .92rem; font-weight: 600; color: var(--text-main); }
+    .detail-value.good { color: var(--teal); }
+    .detail-value.bad  { color: var(--red); }
+
+    /* ===================== ANIM ===================== */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===================== FOOTER ===================== */
+    footer { text-align: center; margin-top: 64px; font-size: .78rem; color: #2d4a60; }
+    footer strong { color: var(--teal); }
+  </style>
+</head>
+<body>
+
+<div class="bg-canvas"></div>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      Skill<span>Gap</span> AI
+    </div>
+    <p class="tagline">Next-Gen AI Resume Intelligence</p>
+  </header>
+
+  <!-- UPLOAD -->
+  <div class="upload-card" id="dropZone">
+    <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/>
+    </svg>
+    <span id="fileName">Drop your PDF resume here, or click to browse…</span>
+    <input type="file" id="fileInputHidden" accept=".pdf" />
+    <button class="btn-analyze" id="analyzeBtn" onclick="uploadFile()" disabled>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Analyze
+    </button>
+  </div>
+  <p class="upload-hint">Supported format: PDF · Your data is never stored</p>
+
+  <!-- SPINNER -->
+  <div class="spinner-wrap" id="spinner">
+    <div class="spinner"></div>
+    <p>Analyzing your resume with AI…</p>
+  </div>
+
+  <!-- RESULT -->
+  <div id="result">
+
+    <!-- BANNER -->
+    <div class="banner" id="banner">
+      <div class="banner-left">
+        <div class="banner-icon" id="bannerIcon">✅</div>
+        <div>
+          <div class="banner-label" id="bannerLabel">STRONG MATCH</div>
+          <div class="banner-sub" id="bannerSub">Your resume aligns well with the detected role.</div>
+        </div>
+      </div>
+      <div class="banner-right">
+        <div class="confidence-label">Match Score</div>
+        <div class="confidence-value" id="confidenceValue">—</div>
+      </div>
+    </div>
+
+    <!-- 3-COL GRID -->
+    <div class="grid-3">
+
+      <!-- Role Profile -->
+      <div class="card">
+        <div class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          Role Profile
+        </div>
+        <div class="role-value" id="roleValue">—</div>
+        <div class="progress-label"><span>Match Score</span><span id="scoreLabel">—</span></div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div style="margin-top:14px;">
+          <div class="progress-label"><span>Skills Found</span><span id="foundLabel">—</span></div>
+          <div class="progress-track"><div class="progress-fill" id="foundFill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Radar Chart -->
+      <div class="card" style="display:flex;flex-direction:column;">
+        <div class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"/></svg>
+          Skill Radar
+        </div>
+        <div class="radar-wrap"><canvas id="radarChart"></canvas></div>
+      </div>
+
+      <!-- Skill Tags -->
+      <div class="card">
+        <div class="card-title">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          Skill Fingerprint
+        </div>
+        <div class="tag-cloud" id="tagCloud"></div>
+      </div>
+
+    </div>
+
+    <!-- ADVANCED ACCORDION -->
+    <div class="accordion" id="accordion">
+      <div class="accordion-header" onclick="toggleAccordion()">
+        <span>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Deep Analysis / Advanced Details
+        </span>
+        <svg class="chevron" id="chevron" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="accordion-body" id="accordionBody">
+        <div class="detail-grid" id="detailGrid"></div>
+      </div>
+    </div>
+
+  </div><!-- end #result -->
+
+</div><!-- end .page -->
+
+<footer>
+  Powered by <strong>SkillGap AI</strong> · <span id="year"></span>
+</footer>
+
+<script>
+  document.getElementById('year').textContent = new Date().getFullYear();
+
+  /* -------- File pick / drag-drop -------- */
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInputHidden');
+  const fileNameEl = document.getElementById('fileName');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  let selectedFile = null;
+  let radarChartInstance = null;
+
+  dropZone.addEventListener('click', (e) => {
+    if (e.target === analyzeBtn || analyzeBtn.contains(e.target)) return;
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files[0];
+    if (f) setFile(f);
+  });
+
+  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type === 'application/pdf') setFile(f);
+    else alert('Please drop a valid PDF file.');
+  });
+
+  function setFile(f) {
+    selectedFile = f;
+    fileNameEl.textContent = f.name;
+    fileNameEl.classList.add('has-file');
+    analyzeBtn.disabled = false;
+  }
+
+  /* -------- Analyze -------- */
+  async function uploadFile() {
+    if (!selectedFile) return;
+
+    document.getElementById('result').style.display = 'none';
+    document.getElementById('spinner').style.display = 'block';
+    analyzeBtn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const res = await fetch('http://127.0.0.1:5000/predict', { method: 'POST', body: formData });
+      const data = await res.json();
+      document.getElementById('spinner').style.display = 'none';
+      analyzeBtn.disabled = false;
+      if (data.error) { alert('Error: ' + data.error); return; }
+      showResult(data);
+    } catch (e) {
+      document.getElementById('spinner').style.display = 'none';
+      analyzeBtn.disabled = false;
+      alert('Could not reach the backend. Make sure the Flask server is running on http://127.0.0.1:5000');
+    }
+  }
+
+  /* -------- Render result -------- */
+  function showResult(data) {
+    const score = data.match_score;
+    const detected = data.detected_skills || [];
+    const missing  = data.missing_skills  || [];
+    const role     = data.role || '—';
+    const total    = detected.length + missing.length;
+
+    /* Banner */
+    const banner = document.getElementById('banner');
+    const icon   = document.getElementById('bannerIcon');
+    const label  = document.getElementById('bannerLabel');
+    const sub    = document.getElementById('bannerSub');
+    const conf   = document.getElementById('confidenceValue');
+
+    banner.className = 'banner';
+    if (score >= 65) {
+      banner.classList.add('good');
+      icon.textContent  = '✅';
+      label.textContent = 'STRONG MATCH';
+      sub.textContent   = 'Your profile aligns well with the detected role.';
+    } else if (score >= 35) {
+      banner.classList.add('warn');
+      icon.textContent  = '⚠️';
+      label.textContent = 'PARTIAL MATCH';
+      sub.textContent   = 'Some key skills are missing — upskilling recommended.';
+    } else {
+      banner.classList.add('bad');
+      icon.textContent  = '❌';
+      label.textContent = 'LOW MATCH';
+      sub.textContent   = 'Significant skill gaps detected. Review the missing skills.';
+    }
+    conf.textContent = score + '%';
+
+    /* Role card */
+    document.getElementById('roleValue').textContent = role;
+    document.getElementById('scoreLabel').textContent = score + '%';
+    const fill = document.getElementById('progressFill');
+    fill.style.width = '0%';
+    fill.className = 'progress-fill' + (score >= 65 ? '' : score >= 35 ? ' warn' : ' bad');
+    setTimeout(() => fill.style.width = score + '%', 50);
+
+    const foundPct = total > 0 ? Math.round((detected.length / total) * 100) : 0;
+    document.getElementById('foundLabel').textContent = detected.length + ' / ' + total;
+    const fill2 = document.getElementById('foundFill');
+    fill2.style.width = '0%';
+    fill2.className = 'progress-fill' + (foundPct >= 65 ? '' : foundPct >= 35 ? ' warn' : ' bad');
+    setTimeout(() => fill2.style.width = foundPct + '%', 120);
+
+    /* Radar chart */
+    buildRadar(detected, missing);
+
+    /* Tag cloud */
+    const cloud = document.getElementById('tagCloud');
+    cloud.innerHTML = '';
+    detected.forEach(s => {
+      const t = document.createElement('span');
+      t.className = 'tag detected';
+      t.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>${s}`;
+      cloud.appendChild(t);
+    });
+    missing.forEach(s => {
+      const t = document.createElement('span');
+      t.className = 'tag missing';
+      t.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>${s}`;
+      cloud.appendChild(t);
+    });
+
+    /* Advanced details */
+    const grid = document.getElementById('detailGrid');
+    grid.innerHTML = '';
+    const details = [
+      { label: 'Detected Role',    value: role, cls: 'good' },
+      { label: 'Match Score',      value: score + '%', cls: score >= 65 ? 'good' : score >= 35 ? '' : 'bad' },
+      { label: 'Skills Detected',  value: detected.length, cls: detected.length > 0 ? 'good' : 'bad' },
+      { label: 'Skills Missing',   value: missing.length,  cls: missing.length === 0 ? 'good' : 'bad' },
+      { label: 'Skills Required',  value: total },
+      { label: 'Coverage',         value: foundPct + '%', cls: foundPct >= 65 ? 'good' : foundPct >= 35 ? '' : 'bad' },
+      { label: 'Top Missing Skills', value: missing.slice(0,3).join(', ') || 'None', cls: missing.length === 0 ? 'good' : 'bad' },
+      { label: 'Top Detected Skills', value: detected.slice(0,3).join(', ') || 'None', cls: detected.length > 0 ? 'good' : '' },
+    ];
+    details.forEach(d => {
+      const div = document.createElement('div');
+      div.className = 'detail-item';
+      div.innerHTML = `<div class="detail-label">${d.label}</div><div class="detail-value ${d.cls||''}">${d.value}</div>`;
+      grid.appendChild(div);
+    });
+
+    document.getElementById('result').style.display = 'block';
+  }
+
+  /* -------- Radar -------- */
+  function buildRadar(detected, missing) {
+    const ctx = document.getElementById('radarChart');
+    if (radarChartInstance) { radarChartInstance.destroy(); radarChartInstance = null; }
+
+    const all = [...detected, ...missing];
+    if (all.length === 0) return;
+
+    // pick up to 6 labels
+    const labels = all.slice(0, 6);
+    const myData  = labels.map(s => detected.includes(s) ? 1 : 0);
+    const reqData  = labels.map(() => 1);
+
+    radarChartInstance = new Chart(ctx, {
+      type: 'radar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'You',
+            data: myData,
+            backgroundColor: 'rgba(0,212,170,0.18)',
+            borderColor: '#00d4aa',
+            borderWidth: 1.8,
+            pointBackgroundColor: '#00d4aa',
+            pointRadius: 3,
+          },
+          {
+            label: 'Required',
+            data: reqData,
+            backgroundColor: 'rgba(56,189,248,0.07)',
+            borderColor: 'rgba(56,189,248,0.45)',
+            borderWidth: 1.2,
+            pointBackgroundColor: '#38bdf8',
+            pointRadius: 2,
+            borderDash: [4,4],
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          r: {
+            min: 0, max: 1,
+            ticks: { display: false },
+            grid: { color: 'rgba(255,255,255,0.07)' },
+            angleLines: { color: 'rgba(255,255,255,0.08)' },
+            pointLabels: { color: '#7fa0bb', font: { size: 9, family: 'Inter' } }
+          }
+        }
+      }
+    });
+  }
+
+  /* -------- Accordion -------- */
+  function toggleAccordion() {
+    const body    = document.getElementById('accordionBody');
+    const chevron = document.getElementById('chevron');
+    body.classList.toggle('open');
+    chevron.classList.toggle('open');
+  }
+</script>
+
+</body>
+</html>

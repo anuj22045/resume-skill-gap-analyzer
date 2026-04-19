@@ -1,47 +1,81 @@
 import pickle
 import re
 import nltk
+import os
 from nltk.corpus import stopwords
-from PyPDF2 import PdfReader
+# from PyPDF2 import PdfReader
 from skills import skills_db
+from pdfminer.high_level import extract_text
 from sklearn.metrics.pairwise import cosine_similarity
 
 nltk.download('stopwords')
 stop_words = set(stopwords.words('english'))
 
 # load model 
-model = pickle.load(open("model.pkl", "rb"))
-tfidf = pickle.load(open("tfidf.pkl", "rb"))
-le = pickle.load(open("label_encoder.pkl", "rb"))
+# model = pickle.load(open("model.pkl", "rb"))
+# tfidf = pickle.load(open("tfidf.pkl", "rb"))
+# le = pickle.load(open("label_encoder.pkl", "rb"))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+model = pickle.load(open(os.path.join(BASE_DIR, "model.pkl"), "rb"))
+tfidf = pickle.load(open(os.path.join(BASE_DIR, "tfidf.pkl"), "rb"))
+le = pickle.load(open(os.path.join(BASE_DIR, "label_encoder.pkl"), "rb"))
 
 
 # extract text from pdf 
+# def extract_text_from_pdf(file_path):
+#     text = ""
+#     reader = PdfReader(file_path)
+    
+#     for page in reader.pages:
+#         text += page.extract_text() or ""
+    
+#     return text
+
 def extract_text_from_pdf(file_path):
-    text = ""
-    reader = PdfReader(file_path)
-    
-    for page in reader.pages:
-        text += page.extract_text() or ""
-    
-    return text
+    return extract_text(file_path)
+
+
+
+
 
 # Clean text
 def clean_text(text):
-    text = re.sub(r'[^a-zA-Z]', ' ', str(text))
+    text = re.sub(r'[^a-zA-Z0-9+#.]', ' ', str(text))
     text = text.lower()
     words = text.split()
     return " ".join(words)
 
+# def extract_skills(text, role):
+#     detected = []
+    
+#     role_skills = skills_db.get(role, [])
+    
+#     for skill in role_skills:
+#         if skill.lower() in text:
+#             detected.append(skill)
+    
+#     return detected
+
 def extract_skills(text, role):
     detected = []
-    
     role_skills = skills_db.get(role, [])
-    
+
+    text = text.lower()
+
     for skill in role_skills:
-        if skill.lower() in text:
-            detected.append(skill)
-    
+        skill_lower = skill.lower()
+
+        # 🔥 Special case for symbols like C++, C#, Node.js
+        if any(sym in skill_lower for sym in ['+', '#', '.']):
+            if skill_lower in text:
+                detected.append(skill)
+        else:
+            pattern = r'\b' + re.escape(skill_lower) + r'\b'
+            if re.search(pattern, text):
+                detected.append(skill)
     return detected
+
+
 
 
 def get_missing_skills(detected, role):
@@ -83,6 +117,8 @@ def calculate_match_score(detected, role):
 # Predict function
 def predict_resume(file_path):
     raw_text = extract_text_from_pdf(file_path)
+    # print("CHECK:", "c++" in raw_text.lower())
+    # print("TEXT SAMPLE:\n", raw_text[:500])
     
     if raw_text.strip() == "":
         return {
@@ -101,7 +137,7 @@ def predict_resume(file_path):
     role = le.inverse_transform(prediction)[0]
     
     # Skill logic
-    detected_skills = extract_skills(cleaned, role)
+    detected_skills = extract_skills(raw_text.lower(), role)
     missing_skills = get_missing_skills(detected_skills, role)
     match_score = calculate_match_score(detected_skills, role)
     similarity_score = calculate_Similarity_score(cleaned, role)
@@ -118,7 +154,7 @@ def predict_resume(file_path):
 
 # TEST YOUR MODEL
 if __name__ == "__main__":
-    file_path = "Resume_Anuj.pdf"
+    file_path = "../Resume_Anuj.pdf"
     
     result = predict_resume(file_path)
     
@@ -130,5 +166,6 @@ if __name__ == "__main__":
         print("\n Match Score:", result["Similarity_score"], "%")
         print("\n Skills:", result["detected_skills"])
         print("\nMissing:", result["missing_skills"])
+    
 
     
